@@ -2,13 +2,16 @@ package study.querydsl.repository;
 
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.repository.support.PageableExecutionUtils;
 import study.querydsl.dto.MemberSearchCondition;
 import study.querydsl.dto.MemberTeamDto;
 import study.querydsl.dto.QMemberTeamDto;
+import study.querydsl.entity.Member;
 
 import java.util.List;
 
@@ -97,7 +100,7 @@ public class MemberRepositoryCustomImpl implements MemberRepositoryCustom{
                 .fetch();//fetch로 컨텐츠만 가져온다 (count쿼리 안날림)
 
         //count쿼리 따로날림 (select projection 단순화)
-        long total = queryFactory
+        JPAQuery<Member> countQuery = queryFactory
                 .selectFrom(member)
                 .leftJoin(member.team, team)
                 .where(
@@ -105,10 +108,16 @@ public class MemberRepositoryCustomImpl implements MemberRepositoryCustom{
                         teamNameEq(condition.getTeamName()),
                         ageGoe(condition.getAgeGoe()),
                         ageLoe(condition.getAgeLoe())
-                )
-                .fetchCount();
+                ); //여기서 fetchCount()해야 실제 카운트 쿼리 날라감
 
-        return new PageImpl<>(content, pageable, total);
+        /**
+         * 이 유틸이 카운트 쿼리 최적화해줌
+         * - 첫번째 페이지고 컨텐츠 사이즈가 페이지 사이즈보다 작을 때
+         * - 마지막 페이지 일때 (offset + 컨텐츠 사이즈 = 전체 사이즈)
+         * 위 두가지 경우 count쿼리 안날림
+         */
+        return PageableExecutionUtils.getPage(content, pageable, countQuery::fetchCount);
+//        return new PageImpl<>(content, pageable, total);
     }
 
     //반환형을 Predicate보다는 BooleanExpression해주는게 낫다
